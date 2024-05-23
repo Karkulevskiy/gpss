@@ -1,0 +1,79 @@
+XPDIS    FUNCTION    RN1,C24
+0,0/.1,.104/.2,.222/.3,.355/.4,.509/.5,.69/.6,.915
+.7,1.2/.75,1.38/.8,1.6/.84,1.85/.88,2.12/.9,2.3
+.92,2.52/.94,2.81/.95,2.99/.96,3.2/.97,3.5/.98,3.9
+.99,4.6/.995,5.3/.998,6.2/.999,7/.9998,8
+
+
+
+GENERATE 1000,FN$Xpdis ;Генерируем первый поток
+ASSIGN 1,1	   ;Отметим, что это 1 поток
+;TRANSFER .5,,INPUT_1   ;Отправим его на метку INPUT с вероятностью 0.5
+TRANSFER ,flow_1	   ;Если он не попал в первый раз, то точно попадет во второй(вероятности 0.5 0.5)
+
+GENERATE 500,FN$Xpdis  ;Генерируем 2 поток
+ASSIGN 1,2	   ;Отметим, что это 2 поток
+;TRANSFER .4,,INPUT_1 ; С вероятностью 0.4 поток идет на 1 процессор
+TRANSFER ,flow_2 ;Иначе он идет на 2
+
+
+;Первый процессор
+INPUT_1 QUEUE WAIT_CPU_1
+	SEIZE CPU ;заняли прибор
+	DEPART WAIT_CPU_1 ;отключили от очереди
+	ADVANCE 100,FN$Xpdis ;задержка 1 сек
+	RELEASE CPU ; сняли прибор
+	PRIORITY 0 ;поставили приоритет 0
+	TRANSFER .2,,BYE ;с вероятностью 0.2 Транз-т завершил работу
+	;отправляет на приборы с разными вероятностями
+	TRANSFER .5,,to_md2 
+	TRANSFER .5,,to_md3
+	TRANSFER ,to_md4
+
+;Второй процессор тоже самое делает, что 1-й процессор
+INPUT_2 QUEUE WAIT_CPU_2
+	SEIZE CPU
+	DEPART WAIT_CPU_2
+	ADVANCE 50,FN$Xpdis
+	RELEASE CPU
+	PRIORITY 0
+	TRANSFER .2,,BYE
+	
+	TRANSFER .5,,to_md2
+	TRANSFER .5,,to_md3
+	TRANSFER ,to_md4
+
+;прибор мд2
+to_md2 QUEUE wait_md2
+	SEIZE md2
+	DEPART wait_md2
+	ADVANCE 300,FN$Xpdis ;задержка 3 сек
+	RELEASE md2
+	PRIORITY 1 ;ставим приоритет, чтобы попасть в начало очереди
+	TEST E p1,1,flow_2 ;если это транзакт из 1 потока
+	TRANSFER ,flow_1
+	
+to_md4 QUEUE wait_md4
+	SEIZE md4
+	DEPART wait_md4
+	ADVANCE 400,FN$Xpdis
+	RELEASE md4
+	TEST E p1,1,flow_2
+	TRANSFER ,flow_1
+	
+to_md3 QUEUE wait_md3
+	SEIZE md3
+	DEPART wait_md3
+	ADVANCE 400,FN$Xpdis
+	RELEASE md3
+	TEST E p1,1,flow_2
+	TRANSFER ,flow_1
+
+flow_1    TRANSFER .5,,INPUT_1   	;Отправим его на метку INPUT с вероятностью 0.5
+	TRANSFER ,INPUT_2	;Если он не попал в первый раз, то точно попадет во второй(вероятности 0.5 0.5)
+
+flow_2	TRANSFER .4,,INPUT_1 	;С вероятностью 0.4 поток идет на 1 процессор
+	TRANSFER ,INPUT_2 	;Иначе он идет на 2
+
+BYE TERMINATE 1
+	START 10000
